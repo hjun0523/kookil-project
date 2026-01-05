@@ -3,9 +3,8 @@ package com.kookil.backend.controller.product;
 import com.kookil.backend.dto.product.ProductDto;
 import com.kookil.backend.service.product.ProductService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -14,10 +13,14 @@ public class ProductController {
 
     private final ProductService productService;
 
-    // 목록 조회
+    // 👇 [수정] 목록 조회 (페이징 + 필터링)
     @GetMapping("/products")
-    public List<ProductDto.Response> getProducts() {
-        return productService.getAllProducts();
+    public Page<ProductDto.Response> getProducts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(required = false) Long categoryId // 카테고리 필터 (선택)
+    ) {
+        return productService.getProducts(page, size, categoryId);
     }
 
     // 상세 조회
@@ -33,7 +36,7 @@ public class ProductController {
         return "매물 등록 완료";
     }
 
-    // 👇 [추가] [관리자] 수정
+    // [관리자] 수정
     @PutMapping("/admin/products/{id}")
     public String updateProduct(@PathVariable Long id, @RequestBody ProductDto.Request request) {
         productService.updateProduct(id, request);

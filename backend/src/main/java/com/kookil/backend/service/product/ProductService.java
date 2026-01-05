@@ -7,11 +7,13 @@ import com.kookil.backend.entity.ProductImage;
 import com.kookil.backend.repository.category.CategoryRepository;
 import com.kookil.backend.repository.product.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,12 +23,22 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
 
-    // 전체 조회
+    // 👇 [수정] 페이징 + 카테고리 필터링 조회
     @Transactional(readOnly = true)
-    public List<ProductDto.Response> getAllProducts() {
-        return productRepository.findAllByOrderByIdDesc().stream()
-                .map(ProductDto.Response::new)
-                .collect(Collectors.toList());
+    public Page<ProductDto.Response> getProducts(int page, int size, Long categoryId) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Product> productPage;
+
+        if (categoryId != null) {
+            // 카테고리가 지정된 경우
+            productPage = productRepository.findByCategoryIdOrderByIdDesc(categoryId, pageable);
+        } else {
+            // 전체 조회인 경우
+            productPage = productRepository.findAllByOrderByIdDesc(pageable);
+        }
+
+        // Entity -> DTO 변환
+        return productPage.map(ProductDto.Response::new);
     }
 
     // 상세 조회
@@ -57,20 +69,17 @@ public class ProductService {
                 .description(request.getDescription())
                 .build();
 
-        // 이미지 처리
         saveImages(product, request.getImageUrls());
-
         productRepository.save(product);
     }
 
-    // 👇 [추가] 수정 로직
+    // 수정
     public void updateProduct(Long id, ProductDto.Request request) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 매물입니다. id=" + id));
 
         Category category = getCategoryOrThrow(request.getCategoryId());
 
-        // 정보 갱신 (Dirty Checking)
         product.setTitle(request.getTitle());
         product.setCategory(category);
         product.setProductCode(request.getProductCode());
@@ -85,11 +94,10 @@ public class ProductService {
         product.setStatus(request.getStatus());
         product.setDescription(request.getDescription());
 
-        // 이미지 갱신 (기존 이미지 싹 지우고, 새로 들어온 리스트로 교체 - 순서 보장)
         product.getImages().clear();
         saveImages(product, request.getImageUrls());
 
-        // save 호출은 필요 없지만 명시적으로 작성 가능
+        // Dirty checking으로 자동 저장되지만 명시적 호출
         productRepository.save(product);
     }
 
@@ -110,7 +118,7 @@ public class ProductService {
             for (int i = 0; i < imageUrls.size(); i++) {
                 ProductImage image = ProductImage.builder()
                         .imgUrl(imageUrls.get(i))
-                        .isThumbnail(i == 0) // 0번 인덱스가 썸네일
+                        .isThumbnail(i == 0)
                         .build();
                 product.addImage(image);
             }

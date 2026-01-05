@@ -29,13 +29,13 @@ public class ProductDto {
         private Long price;
 
         @JsonProperty("isPriceOpen")
-        private boolean isPriceOpen; // 가격 공개 여부
+        private boolean isPriceOpen;
 
         private ItemStatus status;
-        private Long categoryId;     // 선택한 카테고리 ID
+        private Long categoryId;
         private String description;
 
-        private List<String> imageUrls; // 업로드된 이미지 URL 리스트 (0번이 썸네일)
+        private List<String> imageUrls;
     }
 
     // 목록/상세 응답
@@ -58,9 +58,10 @@ public class ProductDto {
         private boolean isPriceOpen;
 
         private ItemStatus status;
-        private String categoryName;    // 카테고리명
+        private Long categoryId;        // 👈 [추가] 필터링을 위해 ID 추가
+        private String categoryName;
         private String description;
-        private List<String> images;    // 이미지 URL 리스트
+        private List<String> images;
 
         public Response(Product product) {
             this.id = product.getId();
@@ -77,6 +78,7 @@ public class ProductDto {
             this.status = product.getStatus();
 
             if (product.getCategory() != null) {
+                this.categoryId = product.getCategory().getId(); // 👈 ID 매핑
                 this.categoryName = product.getCategory().getName();
             }
 
