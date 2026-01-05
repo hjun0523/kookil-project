@@ -8,6 +8,7 @@ import AdminLayout from './layouts/AdminLayout'; // 👈 신규 레이아웃
 import HomePage from './pages/home/HomePage';
 import ProductList from './pages/product/ProductList';
 import ProductDetail from './pages/product/ProductDetail';
+import CompanyIntro from './pages/company/CompanyIntro'; // 👈 [추가] 임포트
 
 // 관리자 페이지
 import AdminLogin from './pages/admin/AdminLogin';
@@ -16,6 +17,7 @@ import MenuManagement from './pages/admin/menu/MenuManagement'; // 👈 신규 �
 import BannerManagement from './pages/admin/banner/BannerManagement'; // 👈 추가
 import CategoryManagement from './pages/admin/category/CategoryManagement'; // 👈 추가
 import ProductManagement from './pages/admin/product/ProductManagement'; // 👈 추가
+import LocationManagement from './pages/admin/company/LocationManagement';
 
 // 보호된 경로 (토큰 체크)
 const ProtectedRoute = () => {
@@ -34,6 +36,8 @@ function App() {
             <Route index element={<HomePage />} />
             <Route path="product" element={<ProductList />} />
             <Route path="product/:id" element={<ProductDetail />} />
+            {/* 👇 [추가] 회사 소개 페이지 라우트 연결 */}
+            <Route path="company" element={<CompanyIntro />} />
           </Route>
 
           {/* 2. 관리자 영역 */}
@@ -48,6 +52,8 @@ function App() {
               <Route path="banners" element={<BannerManagement />} /> {/* 👈 추가 */}
               <Route path="categories" element={<CategoryManagement />} /> {/* 👈 라우트 연결 */}
               <Route path="products" element={<ProductManagement />} /> {/* 👈 추가 */}
+              {/* 👇 [추가] 위치 관리 메뉴 연결 */}
+              <Route path="locations" element={<LocationManagement />} />
               {/* 추후 여기에 배너, 매물, 카테고리 추가 */}
             </Route>
           </Route>

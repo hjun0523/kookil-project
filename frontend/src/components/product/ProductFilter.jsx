@@ -5,19 +5,16 @@ import {
 } from '@mui/material';
 import axiosClient from '../../api/axiosClient';
 
-const ProductFilter = ({ onClose }) => {
+// props로 selectedCategory와 onChange 핸들러를 받음
+const ProductFilter = ({ selectedCategory, onCategoryChange, onClose }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // 선택된 카테고리 관리 (기본값: 전체)
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
-
-  // [1] 카테고리 목록 불러오기 (DB 연동)
+   
+  // 카테고리 로딩
   useEffect(() => {
     axiosClient.get('/categories')
       .then((res) => {
-        // isVisible이 true인 카테고리만 필터링
-        const visibleCats = res.filter(cat => cat.isVisible);
+        const visibleCats = res.filter(cat => cat.isVisible).sort((a,b) => a.orderIndex - b.orderIndex);
         setCategories(visibleCats);
       })
       .catch((err) => console.error("카테고리 로딩 실패:", err))
@@ -25,10 +22,8 @@ const ProductFilter = ({ onClose }) => {
   }, []);
 
   const handleCategoryClick = (id) => {
-    setSelectedCategory(id);
-    // 모바일에서 필터 선택 시 드로어 닫기 (선택 사항)
+    onCategoryChange(id); // 👈 부모 컴포넌트의 함수 호출
     if (onClose) onClose(); 
-    // TODO: 부모 컴포넌트(ProductList)에 필터링 요청 보내기 기능 추가 필요
   };
 
   return (
@@ -37,9 +32,8 @@ const ProductFilter = ({ onClose }) => {
         카테고리
       </Typography>
       
-      {/* 카테고리 리스트 */}
       <List component="nav" sx={{ mb: 3 }}>
-        {/* 1. 전체 매물 (고정) */}
+        {/* 전체 매물 */}
         <ListItemButton 
           selected={selectedCategory === 'ALL'}
           onClick={() => handleCategoryClick('ALL')}
@@ -48,9 +42,8 @@ const ProductFilter = ({ onClose }) => {
           <ListItemText primary="전체매물" primaryTypographyProps={{ fontWeight: 'medium' }} />
         </ListItemButton>
 
-        {/* 2. DB에서 가져온 카테고리 (동적) */}
+        {/* 동적 카테고리 */}
         {loading ? (
-          // 로딩 중일 때 스켈레톤 UI
           [1, 2, 3, 4].map((i) => <Skeleton key={i} height={40} />)
         ) : (
           categories.map((cat) => (
@@ -69,7 +62,7 @@ const ProductFilter = ({ onClose }) => {
       <Divider sx={{ my: 3 }} />
 
       <Typography variant="h6" fontWeight="bold" gutterBottom>
-        상태
+        상태 필터 (준비중)
       </Typography>
       <FormGroup>
         <FormControlLabel control={<Checkbox defaultChecked />} label="판매중" />

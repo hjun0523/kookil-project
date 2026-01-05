@@ -1,14 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { 
   Box, Container, Typography, Card, CardMedia, CardContent, 
-  Chip, Button, Paper, IconButton, Zoom, useScrollTrigger, Tooltip
+  Chip, Button, IconButton, Skeleton, Tooltip, Pagination, Stack 
 } from '@mui/material';
 import Grid from '@mui/material/Grid2'; 
 
 // 아이콘 임포트
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing'; 
 import ConstructionIcon from '@mui/icons-material/Construction'; 
 import AgricultureIcon from '@mui/icons-material/Agriculture'; 
@@ -21,17 +20,21 @@ import AppsIcon from '@mui/icons-material/Apps';
 import AddIcon from '@mui/icons-material/Add';      
 import RemoveIcon from '@mui/icons-material/Remove'; 
 
-import { styled, alpha } from '@mui/material/styles';
+import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 
-// --- 스타일 정의 ---
+// 상세 팝업 및 카드 컴포넌트 임포트
+import ProductCard from '../../components/product/ProductCard'; 
+import ProductDetailDialog from '../../components/product/ProductDetailDialog';
 
+// --- 스타일 정의 ---
 const HeroSection = styled(Box)(({ theme }) => ({
   position: 'relative',
   width: '100%',
   backgroundColor: '#f5f5f5', 
-  marginBottom: theme.spacing(4)
+  marginBottom: theme.spacing(4),
+  minHeight: '200px'
 }));
 
 const BannerWrapper = styled(Box)(({ theme }) => ({
@@ -69,22 +72,8 @@ const ArrowButton = styled(IconButton)(({ theme }) => ({
   '&:hover': { backgroundColor: 'rgba(26, 35, 126, 0.9)', opacity: 1 }
 }));
 
-const StyledTopButton = styled(Box)(({ theme }) => ({
-  position: 'fixed',
-  bottom: 40, right: 40, zIndex: 999,
-  width: 55, height: 55,
-  backgroundColor: '#1A237E', color: 'white',
-  borderRadius: '12px',
-  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-  cursor: 'pointer', transition: 'all 0.3s ease',
-  '&:hover': { transform: 'translateY(-5px)', backgroundColor: '#0d1b60' },
-  '& .top-text': { fontSize: '10px', fontWeight: 'bold', marginTop: '-2px' }
-}));
-
-// 카테고리 버튼 사이즈 및 스타일 최적화 (Compact Mode)
 const CategoryButton = styled(Box)(({ theme, active }) => ({
-  padding: theme.spacing(0.5), // 패딩 최소화
+  padding: theme.spacing(0.5), 
   borderRadius: theme.shape.borderRadius,
   cursor: 'pointer',
   transition: 'all 0.2s',
@@ -92,12 +81,11 @@ const CategoryButton = styled(Box)(({ theme, active }) => ({
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  height: '75px', // 높이 대폭 축소
+  height: '75px', 
   border: active ? '2px solid #1A237E' : '1px solid #eee', 
   backgroundColor: active ? '#1A237E' : '#fff', 
   color: active ? '#fff' : '#555', 
   boxShadow: active ? '0 4px 10px rgba(26, 35, 126, 0.3)' : 'none',
-  
   '&:hover': {
     transform: 'translateY(-2px)',
     borderColor: '#1A237E',
@@ -106,30 +94,6 @@ const CategoryButton = styled(Box)(({ theme, active }) => ({
   }
 }));
 
-function ScrollTop(props) {
-  const { window } = props;
-  const trigger = useScrollTrigger({
-    target: window ? window() : undefined,
-    disableHysteresis: true,
-    threshold: 300,
-  });
-
-  const handleClick = (event) => {
-    const anchor = (event.target.ownerDocument || document).querySelector('#back-to-top-anchor');
-    if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
-  return (
-    <Zoom in={trigger}>
-      <StyledTopButton onClick={handleClick} role="presentation">
-        <KeyboardArrowUpIcon sx={{ fontSize: '28px' }} />
-        <span className="top-text">TOP</span>
-      </StyledTopButton>
-    </Zoom>
-  );
-}
-
-// 아이콘 매핑
 const getCategoryIcon = (name) => {
   const props = { fontSize: "medium" }; 
   if (name.includes('머시닝') || name.includes('CNC')) return <PrecisionManufacturingIcon {...props} />;
@@ -142,63 +106,82 @@ const getCategoryIcon = (name) => {
   return <AppsIcon {...props} />; 
 };
 
-const HomePage = (props) => {
+const HomePage = () => {
   const navigate = useNavigate();
 
+  // 상태 관리
+  const [loading, setLoading] = useState(true);
   const [banners, setBanners] = useState([]);
   const [categories, setCategories] = useState([]); 
-  const [allProducts, setAllProducts] = useState([]); 
-  const [displayProducts, setDisplayProducts] = useState([]); 
   
+  // 👇 [수정] 데이터 관련 상태 변경 (서버 페이징 대응)
+  const [products, setProducts] = useState([]); // 현재 페이지 데이터만 저장
+  const [totalPages, setTotalPages] = useState(1);
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState('ALL');
-
-  // 카테고리 더보기 상태
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // 페이지네이션 상태
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 8; // 한 페이지당 8개
+
+  // 상세 팝업 상태
+  const [openDetail, setOpenDetail] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState(null);
 
   const slideInterval = useRef(null);
 
+  // 1. 초기 로딩 (배너, 카테고리)
   useEffect(() => {
-    // 1. 배너 로드
-    axiosClient.get('/banners?type=MAIN')
-      .then(res => {
-        const visible = res.filter(b => b.isVisible);
-        setBanners(visible.length > 0 ? visible : [{ id: 'def', imageUrl: 'https://via.placeholder.com/1920x500' }]);
-      })
-      .catch(err => console.error(err));
-
-    // 2. 카테고리 로드
-    axiosClient.get('/categories')
-      .then(res => {
-        const activeCats = res.filter(c => c.isVisible).sort((a, b) => a.orderIndex - b.orderIndex);
-        setCategories(activeCats);
-      })
-      .catch(err => console.error(err));
-
-    // 3. 전체 매물 로드
-    axiosClient.get('/products')
-      .then(res => {
-        setAllProducts(res);
-        setDisplayProducts(res.slice(0, 12)); 
-      })
-      .catch(err => console.error(err));
+    const fetchInitData = async () => {
+      try {
+        const [bannerRes, categoryRes] = await Promise.all([
+          axiosClient.get('/banners?type=MAIN'),
+          axiosClient.get('/categories')
+        ]);
+        
+        const visibleBanners = bannerRes.filter(b => b.isVisible);
+        setBanners(visibleBanners.length > 0 ? visibleBanners : [{ id: 'def', imageUrl: 'https://via.placeholder.com/1920x500' }]);
+        setCategories(categoryRes.filter(c => c.isVisible).sort((a, b) => a.orderIndex - b.orderIndex));
+      } catch (err) {
+        console.error("초기 데이터 로딩 실패:", err);
+      }
+    };
+    fetchInitData();
   }, []);
 
-  // 카테고리 필터링 로직
+  // 2. 매물 데이터 로딩 (페이징 + 필터링 적용)
+  // 👇 [수정] page나 category가 바뀔 때마다 서버에 요청하도록 변경
   useEffect(() => {
-    if (selectedCategoryId === 'ALL') {
-      setDisplayProducts(allProducts.slice(0, 12)); 
-    } else {
-      const selectedCat = categories.find(c => c.id === selectedCategoryId);
-      if (selectedCat) {
-        const filtered = allProducts.filter(p => p.categoryName === selectedCat.name);
-        setDisplayProducts(filtered);
-      }
-    }
-  }, [selectedCategoryId, allProducts, categories]);
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        // API 요청 파라미터 구성
+        let url = `/products?page=${page - 1}&size=${ITEMS_PER_PAGE}`;
+        if (selectedCategoryId !== 'ALL') {
+          url += `&categoryId=${selectedCategoryId}`;
+        }
 
-  // 배너 슬라이드 로직
+        const res = await axiosClient.get(url);
+        
+        // 👇 [핵심 수정] 응답 구조가 Page 객체이므로 content를 뽑아서 사용
+        console.log("홈 매물 로드:", res);
+        setProducts(res.content || []); 
+        setTotalPages(res.totalPages || 1);
+
+      } catch (err) {
+        console.error("매물 데이터 로딩 실패:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, [page, selectedCategoryId]);
+
+  // 배너 슬라이드
   useEffect(() => {
     if (banners.length <= 1) return;
     const startSlide = () => {
@@ -213,161 +196,164 @@ const HomePage = (props) => {
   const handleNext = () => setCurrentIndex((prev) => (prev + 1) % banners.length);
   const handlePrev = () => setCurrentIndex((prev) => (prev - 1 + banners.length) % banners.length);
   const handleDotClick = (index) => setCurrentIndex(index);
-  const handleCategoryChange = (id) => setSelectedCategoryId(id);
+  
+  const handleCategoryChange = (id) => {
+    setSelectedCategoryId(id);
+    setPage(1); // 카테고리 변경 시 1페이지로 리셋
+  };
+  
   const toggleExpand = () => setIsExpanded(!isExpanded);
+  
+  // 페이지 변경 핸들러
+  const handlePageChange = (event, value) => {
+    setPage(value);
+  };
 
-  // [로직] 한 줄에 8개 배치 (PC 기준 md=1.5)
-  // [ALL] + [카테고리 6개] + [더보기] = 8개 (1줄)
-  const ITEMS_PER_ROW = 8;
-  const CATS_TO_SHOW = ITEMS_PER_ROW - 2; // ALL과 더보기 버튼을 뺀 나머지 슬롯 수
+  // 상세 팝업 핸들러
+  const handleProductClick = (id) => {
+    setSelectedProductId(id);
+    setOpenDetail(true);
+  };
+
+  const handleCloseDetail = () => {
+    setOpenDetail(false);
+    setSelectedProductId(null);
+  };
+
+  const ITEMS_PER_ROW_CAT = 8;
+  const CATS_TO_SHOW = ITEMS_PER_ROW_CAT - 2;
 
   return (
     <Box>
-      <div id="back-to-top-anchor" />
-
       {/* 1. 메인 배너 */}
       <HeroSection>
         <Container maxWidth="lg" sx={{ px: { xs: 0, md: '24px' } }}>
-          <BannerWrapper onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
-            {banners.map((banner, index) => (
-              <HeroSlide key={banner.id} active={index === currentIndex ? 1 : 0} sx={{ backgroundImage: `url(${banner.imageUrl})` }} />
-            ))}
-            {banners.length > 1 && (
-              <>
-                <ArrowButton onClick={handlePrev} sx={{ left: 20, opacity: isHovered ? 1 : 0 }}><ArrowBackIosNewIcon /></ArrowButton>
-                <ArrowButton onClick={handleNext} sx={{ right: 20, opacity: isHovered ? 1 : 0 }}><ArrowForwardIosIcon /></ArrowButton>
-                <Box sx={{ position: 'absolute', bottom: 15, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 1, zIndex: 20 }}>
-                  {banners.map((_, index) => (
-                    <Box key={index} onClick={() => handleDotClick(index)} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: index === currentIndex ? '#fff' : 'rgba(255,255,255,0.4)', cursor: 'pointer' }} />
-                  ))}
-                </Box>
-              </>
-            )}
-          </BannerWrapper>
+          {banners.length === 0 ? (
+            <Skeleton variant="rectangular" width="100%" height={380} sx={{ borderRadius: '0 0 16px 16px', bgcolor: '#e0e0e0' }} />
+          ) : (
+            <BannerWrapper onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+              {banners.map((banner, index) => (
+                <HeroSlide key={banner.id} active={index === currentIndex ? 1 : 0} sx={{ backgroundImage: `url(${banner.imageUrl})` }} />
+              ))}
+              {banners.length > 1 && (
+                <>
+                  <ArrowButton onClick={handlePrev} sx={{ left: 20, opacity: isHovered ? 1 : 0 }}><ArrowBackIosNewIcon /></ArrowButton>
+                  <ArrowButton onClick={handleNext} sx={{ right: 20, opacity: isHovered ? 1 : 0 }}><ArrowForwardIosIcon /></ArrowButton>
+                  <Box sx={{ position: 'absolute', bottom: 15, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 1, zIndex: 20 }}>
+                    {banners.map((_, index) => (
+                      <Box key={index} onClick={() => handleDotClick(index)} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: index === currentIndex ? '#fff' : 'rgba(255,255,255,0.4)', cursor: 'pointer' }} />
+                    ))}
+                  </Box>
+                </>
+              )}
+            </BannerWrapper>
+          )}
         </Container>
       </HeroSection>
       
-      {/* 2. 카테고리 탭 + 매물 리스트 섹션 */}
+      {/* 2. 카테고리 및 매물 리스트 */}
       <Container maxWidth="lg" sx={{ mb: 10, mt: -2 }}>
         
-        {/* (A) 카테고리 선택 영역 (Grid 간격 조정: spacing={1}) */}
+        {/* (A) 카테고리 선택 영역 */}
         <Box sx={{ mb: 4 }}>
-           <Grid container spacing={1}>
-              {/* 1. 고정: 전체 제품 (md=1.5 -> 8개/줄) */}
-              <Grid size={{ xs: 4, sm: 2, md: 1.5 }}>
-                <CategoryButton 
-                  active={selectedCategoryId === 'ALL' ? 1 : 0}
-                  onClick={() => handleCategoryChange('ALL')}
-                >
-                  <Box sx={{ mb: 0.5 }}>
-                    <AppsIcon fontSize="medium" color="inherit" />
-                  </Box>
-                  <Typography variant="caption" fontWeight="bold">전체제품</Typography>
-                </CategoryButton>
-              </Grid>
-
-              {/* 2. 카테고리 리스트 (펼침 여부에 따라 갯수 조절) */}
-              {(isExpanded ? categories : categories.slice(0, CATS_TO_SHOW)).map((cat) => (
-                <Grid size={{ xs: 4, sm: 2, md: 1.5 }} key={cat.id}>
-                  <CategoryButton 
-                    active={selectedCategoryId === cat.id ? 1 : 0}
-                    onClick={() => handleCategoryChange(cat.id)}
-                  >
-                    <Box sx={{ mb: 0.5 }}>{getCategoryIcon(cat.name)}</Box>
-                    <Tooltip title={cat.name} arrow>
-                      <Typography 
-                        variant="caption" 
-                        fontWeight="bold" 
-                        sx={{ 
-                          width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', 
-                          textOverflow: 'ellipsis', textAlign: 'center', fontSize: '0.75rem' 
-                        }}
-                      >
-                        {cat.name}
-                      </Typography>
-                    </Tooltip>
-                  </CategoryButton>
-                </Grid>
-              ))}
-
-              {/* 3. 더보기 / 접기 버튼 (카테고리가 많을 때만 표시) */}
-              {categories.length > CATS_TO_SHOW && (
+           {categories.length === 0 ? (
+             <Box display="flex" gap={1} flexWrap="wrap" justifyContent="center">
+                {[1,2,3,4,5,6,7,8].map(i => <Skeleton key={i} variant="rounded" width={100} height={75} />)}
+             </Box>
+           ) : (
+             <Grid container spacing={1}>
                 <Grid size={{ xs: 4, sm: 2, md: 1.5 }}>
-                  <CategoryButton onClick={toggleExpand}>
-                    <Box sx={{ mb: 0.5, bgcolor: isExpanded ? '#ffebee' : '#f3e5f5', borderRadius: '50%', p: 0.5, display: 'flex' }}>
-                       {isExpanded ? 
-                         <RemoveIcon color="error" fontSize="small" /> : 
-                         <AddIcon color="secondary" fontSize="small" />
-                       }
-                    </Box>
-                    <Typography variant="caption" fontWeight="bold" color={isExpanded ? "error" : "secondary"}>
-                      {isExpanded ? "접기" : "더보기"}
-                    </Typography>
+                  <CategoryButton active={selectedCategoryId === 'ALL' ? 1 : 0} onClick={() => handleCategoryChange('ALL')}>
+                    <Box sx={{ mb: 0.5 }}><AppsIcon fontSize="medium" color="inherit" /></Box>
+                    <Typography variant="caption" fontWeight="bold">전체제품</Typography>
                   </CategoryButton>
                 </Grid>
-              )}
-           </Grid>
+                {(isExpanded ? categories : categories.slice(0, CATS_TO_SHOW)).map((cat) => (
+                  <Grid size={{ xs: 4, sm: 2, md: 1.5 }} key={cat.id}>
+                    <CategoryButton active={selectedCategoryId === cat.id ? 1 : 0} onClick={() => handleCategoryChange(cat.id)}>
+                      <Box sx={{ mb: 0.5 }}>{getCategoryIcon(cat.name)}</Box>
+                      <Tooltip title={cat.name} arrow>
+                        <Typography variant="caption" fontWeight="bold" sx={{ width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', fontSize: '0.75rem' }}>{cat.name}</Typography>
+                      </Tooltip>
+                    </CategoryButton>
+                  </Grid>
+                ))}
+                {categories.length > CATS_TO_SHOW && (
+                  <Grid size={{ xs: 4, sm: 2, md: 1.5 }}>
+                    <CategoryButton onClick={toggleExpand}>
+                      <Box sx={{ mb: 0.5, bgcolor: isExpanded ? '#ffebee' : '#f3e5f5', borderRadius: '50%', p: 0.5, display: 'flex' }}>
+                         {isExpanded ? <RemoveIcon color="error" fontSize="small" /> : <AddIcon color="secondary" fontSize="small" />}
+                      </Box>
+                      <Typography variant="caption" fontWeight="bold" color={isExpanded ? "error" : "secondary"}>{isExpanded ? "접기" : "더보기"}</Typography>
+                    </CategoryButton>
+                  </Grid>
+                )}
+             </Grid>
+           )}
         </Box>
 
-        {/* (B) 선택된 카테고리의 매물 리스트 영역 */}
+        {/* (B) 매물 리스트 */}
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, borderBottom: '2px solid #333', pb: 1 }}>
             <Typography variant="h6" fontWeight="bold" color="#333">
-              {selectedCategoryId === 'ALL' 
-                ? '실시간 등록 매물' 
-                : `${categories.find(c => c.id === selectedCategoryId)?.name} 매물 리스트`}
+              {/* 카테고리 이름 찾기 */}
+              {selectedCategoryId === 'ALL' ? '실시간 등록 매물' : 
+                (categories.find(c => c.id === selectedCategoryId)?.name || '매물 리스트')
+              }
             </Typography>
-            <Button size="small" onClick={() => navigate('/product')}>
-              더보기 +
-            </Button>
+            <Button size="small" onClick={() => navigate('/product')}>더보기 +</Button>
           </Box>
 
-          {/* 매물 그리드 */}
-          {displayProducts.length === 0 ? (
-            <Box sx={{ py: 8, textAlign: 'center', bgcolor: '#f9f9f9', borderRadius: 2 }}>
-              <Typography color="text.secondary">등록된 매물이 없습니다.</Typography>
-            </Box>
-          ) : (
+          {loading ? (
             <Grid container spacing={3}>
-              {displayProducts.map((item) => (
-                <Grid size={{ xs: 12, sm: 6, md: 3 }} key={item.id}>
-                  <Card 
-                    onClick={() => navigate(`/product/${item.id}`)}
-                    sx={{ 
-                      height: '100%', display: 'flex', flexDirection: 'column', 
-                      transition: '0.3s', cursor: 'pointer',
-                      '&:hover': { transform: 'translateY(-5px)', boxShadow: 6 } 
-                    }}
-                  >
-                    <Box sx={{ position: 'relative' }}>
-                       <Chip 
-                        label={item.status === 'SALE' ? '판매중' : item.status === 'SOLD_OUT' ? '매각완료' : '예약중'} 
-                        color={item.status === 'SALE' ? 'primary' : 'default'} 
-                        size="small" 
-                        sx={{ position: 'absolute', top: 10, left: 10, zIndex: 1 }} 
-                      />
-                      <CardMedia 
-                        component="img" 
-                        height="200" 
-                        image={item.images && item.images.length > 0 ? item.images[0] : 'https://via.placeholder.com/300?text=No+Image'} 
-                        alt={item.title} 
-                      />
-                    </Box>
-                    <CardContent sx={{ flexGrow: 1, p: 2 }}>
-                      <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                         {item.categoryName} | {item.modelYear || '연식미상'}
-                      </Typography>
-                      <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1, height: '3em', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                        {item.title}
-                      </Typography>
-                      <Typography variant="h6" color="primary" fontWeight="800">
-                        {item.isPriceOpen ? `${item.price.toLocaleString()}원` : '가격협의'}
-                      </Typography>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((item) => (
+                <Grid size={{ xs: 12, sm: 6, md: 3 }} key={item}>
+                  <Card sx={{ height: '100%' }}>
+                    <Skeleton variant="rectangular" height={200} animation="wave" />
+                    <CardContent>
+                      <Skeleton width="60%" height={20} sx={{ mb: 1 }} />
+                      <Skeleton width="80%" height={30} sx={{ mb: 1 }} />
+                      <Skeleton width="40%" height={30} />
                     </CardContent>
                   </Card>
                 </Grid>
               ))}
             </Grid>
+          ) : (
+            <>
+              {products.length === 0 ? (
+                <Box sx={{ py: 8, textAlign: 'center', bgcolor: '#f9f9f9', borderRadius: 2 }}>
+                  <Typography color="text.secondary">등록된 매물이 없습니다.</Typography>
+                </Box>
+              ) : (
+                // 👇 [수정] Grid Layout: lg={3} 적용하여 한 줄에 4개 표시
+                <Grid container spacing={3} sx={{ minHeight: '400px' }}>
+                  {products.map((item) => (
+                    <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={item.id}>
+                      <ProductCard 
+                        item={item} 
+                        onClick={() => handleProductClick(item.id)} 
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+
+              {/* 페이지네이션 컨트롤 */}
+              {totalPages > 1 && (
+                <Stack spacing={2} sx={{ mt: 4, alignItems: 'center' }}>
+                  <Pagination 
+                    count={totalPages} 
+                    page={page} 
+                    onChange={handlePageChange} 
+                    color="primary" 
+                    size="large"
+                    showFirstButton 
+                    showLastButton
+                  />
+                </Stack>
+              )}
+            </>
           )}
         </Box>
       </Container>
@@ -375,21 +361,19 @@ const HomePage = (props) => {
       {/* 4. 회사 소개 배너 */}
       <Box sx={{ bgcolor: '#eceff1', py: 8 }}>
         <Container maxWidth="md" sx={{ textAlign: 'center' }}>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            믿을 수 있는 중고 기계 거래, 국일기계
-          </Typography>
-          <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
-            30년 전통의 노하우로 엄선된 장비만을 취급합니다.<br />
-            구매부터 설치, 시운전까지 완벽하게 지원해 드립니다.
-          </Typography>
-          <Button variant="outlined" size="large" sx={{ borderColor: '#1A237E', color: '#1A237E' }}>
-            회사 소개 더보기
-          </Button>
+          <Typography variant="h4" fontWeight="bold" gutterBottom>믿을 수 있는 중고 기계 거래, 국일기계</Typography>
+          <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>30년 전통의 노하우로 엄선된 장비만을 취급합니다.<br />구매부터 설치, 시운전까지 완벽하게 지원해 드립니다.</Typography>
+          <Button variant="outlined" size="large" sx={{ borderColor: '#1A237E', color: '#1A237E' }} onClick={() => navigate('/company')}>회사 소개 더보기</Button>
         </Container>
       </Box>
+      
+      {/* 상세 정보 팝업 컴포넌트 */}
+      <ProductDetailDialog 
+        open={openDetail} 
+        productId={selectedProductId} 
+        onClose={handleCloseDetail} 
+      />
 
-      {/* Top 버튼 */}
-      <ScrollTop {...props} />
     </Box>
   );
 };

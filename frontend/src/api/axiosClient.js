@@ -7,7 +7,7 @@ const axiosClient = axios.create({
   },
 });
 
-// 👇 [추가] 요청 인터셉터: API 요청 보낼 때마다 토큰이 있으면 헤더에 쏙! 넣음
+// 👇 [요청 인터셉터] API 요청 보낼 때마다 토큰이 있으면 헤더에 넣음
 axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('ACCESS_TOKEN');
@@ -21,19 +21,30 @@ axiosClient.interceptors.request.use(
   }
 );
 
-// 👇 [추가] 응답 인터셉터: 401(권한 없음) 에러가 뜨면 강제 로그아웃 처리
+// 👇 [응답 인터셉터] 401(권한 없음/토큰 만료) 에러 처리 강화
 axiosClient.interceptors.response.use(
   (response) => {
-    return response.data; // data만 바로 반환
+    return response.data; // 성공 시 data만 반환
   },
   (error) => {
     const { response } = error;
+    
+    // 서버에서 401 (Unauthorized) 응답이 왔을 때 (토큰 만료 등)
     if (response && response.status === 401) {
-      // 토큰이 만료되었거나 위조된 경우 -> 로그아웃 시키고 로그인 페이지로 보냄
+      // 1. 만료된 토큰 삭제
       localStorage.removeItem('ACCESS_TOKEN');
-      // window.location.href = '/k-manager/login'; // 필요 시 주석 해제
+      
+      // 2. (선택사항) 사용자 정보 등 관련 데이터가 있다면 함께 삭제
+      // localStorage.removeItem('USER_INFO'); 
+
+      // 3. 사용자에게 알림 (UX 개선)
+      alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+
+      // 4. 로그인 페이지로 강제 이동 (주석 해제 및 적용)
+      window.location.href = '/k-manager/login'; 
     }
-    throw error;
+    
+    return Promise.reject(error);
   }
 );
 
