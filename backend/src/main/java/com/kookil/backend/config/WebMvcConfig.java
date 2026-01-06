@@ -1,22 +1,28 @@
 package com.kookil.backend.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import java.nio.file.Paths;
-
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
+    // application.yml(또는 local/prod)에서 'upload.path' 값을 가져옴
+    // 값이 없으면 기본값으로 './uploads/' 사용
+    @Value("${upload.path:./uploads/}")
+    private String uploadPath;
+
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 1. 저장된 실제 경로를 가져온다 (절대 경로)
-        // .toUri().toString()을 쓰면 "file:///Users/..." 형태로 안전하게 변환됨
-        String uploadPath = Paths.get("./uploads").toAbsolutePath().toUri().toString();
+        // 1. 가져온 경로가 "file:" 로 시작하지 않으면 붙여줌 (리눅스/윈도우 호환)
+        String resourceLocation = uploadPath;
+        if (!resourceLocation.startsWith("file:")) {
+            resourceLocation = "file:" + resourceLocation;
+        }
 
-        // 2. 브라우저에서 /uploads/** 로 요청하면 -> 실제 로컬 폴더로 연결
+        // 2. 브라우저 접근 경로 설정
         registry.addResourceHandler("/uploads/**")
-                .addResourceLocations(uploadPath);
+                .addResourceLocations(resourceLocation);
     }
 }

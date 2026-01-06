@@ -1,0 +1,22 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    # AWS 서버 안에 DB가 있으므로 localhost가 맞음
+    url: jdbc:mariadb://localhost:3306/kookil_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Seoul
+    username: root
+    password: 1234  # ★ AWS DB 비밀번호 입력
+
+  jpa:
+    hibernate:
+      ddl-auto: validate  # 운영 환경에서는 데이터 날라가지 않게 validate 또는 none 추천
+    properties:
+      hibernate:
+        show_sql: false   # 운영 로그 최적화
+
+# 리눅스 서버 절대 경로 (예시)
+upload:
+  path: /home/ubuntu/kookil-project/uploads/
