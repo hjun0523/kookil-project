@@ -13,6 +13,7 @@ import CancelIcon from '@mui/icons-material/Cancel'; // 이미지 삭제 아이�
 import axiosClient from '../../../api/axiosClient';
 
 const ProductManagement = () => {
+  // 초기값을 빈 배열로 명시하여 초기 렌더링 에러 방지
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [open, setOpen] = useState(false);
@@ -46,10 +47,27 @@ const ProductManagement = () => {
     fetchCategories();
   }, []);
 
-  const fetchProducts = () => {
-    axiosClient.get('/products') 
-      .then(res => setProducts(res))
-      .catch(err => console.error(err));
+  // ★ [수정됨] 데이터 구조 안전하게 처리
+  const fetchProducts = async () => {
+    try {
+      const res = await axiosClient.get('/products');
+      
+      // 서버 응답 형태 확인 로직
+      if (res && res.content && Array.isArray(res.content)) {
+        // Case 1: 페이징 객체로 온 경우 ({ content: [...], pageable: ... })
+        setProducts(res.content);
+      } else if (Array.isArray(res)) {
+        // Case 2: 그냥 배열로 온 경우 ([...])
+        setProducts(res);
+      } else {
+        // Case 3: 데이터가 없거나 이상한 경우
+        console.warn("데이터 형식이 배열이 아닙니다:", res);
+        setProducts([]); 
+      }
+    } catch (err) {
+      console.error("매물 목록 로드 실패:", err);
+      setProducts([]); // 에러 발생 시 빈 배열로 초기화
+    }
   };
 
   const fetchCategories = () => {
@@ -71,7 +89,7 @@ const ProductManagement = () => {
       
       setFormData({
         id: product.id,
-        categoryId: matchedCategory ? matchedCategory.id : '',
+        categoryId: matchedCategory ? matchedCategory.id : (product.categoryId || ''),
         title: product.title,
         productCode: product.productCode || '',
         manufacturer: product.manufacturer || '',
@@ -224,38 +242,49 @@ const ProductManagement = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {products.map((item) => (
-              <TableRow key={item.id} hover>
-                <TableCell align="center">{item.productCode || item.id}</TableCell>
-                <TableCell align="center">
-                  {item.images && item.images.length > 0 ? (
-                    <img src={item.images[0]} alt="thumb" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 4 }} />
-                  ) : (
-                    <Box sx={{ width: 50, height: 50, bgcolor: '#eee', borderRadius: 4 }} />
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Typography variant="subtitle2" fontWeight="bold">{item.title}</Typography>
-                  <Typography variant="caption" color="text.secondary">{item.manufacturer} | {item.modelYear}</Typography>
-                </TableCell>
-                <TableCell>{item.categoryName}</TableCell>
-                <TableCell>
-                  {item.isPriceOpen ? item.price.toLocaleString() + '원' : '협의'}
-                </TableCell>
-                <TableCell align="center">
-                  <Chip 
-                    label={item.status === 'SALE' ? '판매중' : item.status === 'SOLD_OUT' ? '매각완료' : '예약중'} 
-                    color={item.status === 'SALE' ? 'primary' : 'default'} 
-                    size="small" 
-                  />
-                </TableCell>
-                <TableCell align="center">
-                  {/* 수정 버튼: 아이콘을 누르면 handleOpen에 해당 아이템을 전달 */}
-                  <IconButton color="primary" onClick={() => handleOpen(item)}><EditIcon /></IconButton>
-                  <IconButton color="error" onClick={() => handleDelete(item.id)}><DeleteIcon /></IconButton>
+            {/* ★ [수정됨] products가 배열이고 데이터가 있을 때만 map 실행 */}
+            {Array.isArray(products) && products.length > 0 ? (
+              products.map((item) => (
+                <TableRow key={item.id} hover>
+                  <TableCell align="center">{item.productCode || item.id}</TableCell>
+                  <TableCell align="center">
+                    {item.images && item.images.length > 0 ? (
+                      <img src={item.images[0]} alt="thumb" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 4 }} />
+                    ) : (
+                      <Box sx={{ width: 50, height: 50, bgcolor: '#eee', borderRadius: 4 }} />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="subtitle2" fontWeight="bold">{item.title}</Typography>
+                    <Typography variant="caption" color="text.secondary">{item.manufacturer} | {item.modelYear}</Typography>
+                  </TableCell>
+                  <TableCell>{item.categoryName}</TableCell>
+                  <TableCell>
+                    {item.isPriceOpen ? item.price.toLocaleString() + '원' : '협의'}
+                  </TableCell>
+                  <TableCell align="center">
+                    <Chip 
+                      label={item.status === 'SALE' ? '판매중' : item.status === 'SOLD_OUT' ? '매각완료' : '예약중'} 
+                      color={item.status === 'SALE' ? 'primary' : 'default'} 
+                      size="small" 
+                    />
+                  </TableCell>
+                  <TableCell align="center">
+                    <IconButton color="primary" onClick={() => handleOpen(item)}><EditIcon /></IconButton>
+                    <IconButton color="error" onClick={() => handleDelete(item.id)}><DeleteIcon /></IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              // 데이터가 없을 경우 표시
+              <TableRow>
+                <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                  <Typography variant="body1" color="text.secondary">
+                    등록된 매물이 없습니다.
+                  </Typography>
                 </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </TableContainer>
